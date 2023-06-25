@@ -1,0 +1,272 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Diagnostics;
+
+namespace HyperElk.Core
+{
+    public class Warrior : CombatRoutine
+    {
+        // Spells
+        private const string AutoAttack = "Auto Attack", HeroicStrike = "Heroic Strike", Rend = "Rend", 
+			Charge = "Charge", BattleShout = "Battle Shout", Hamstring = "Hamstring", ThunderClap = "Thunder Clap",
+			MortalStrike = "Mortal Strike", Bloodthirst = "Bloodthirst", Execute = "Execute", Overpower = "Overpower",
+			Cleave = "Cleave", Slam = "Slam", Whirlwind = "Whirlwind", Pummel = "Pummel", ShieldSlam = "Shield Slam",
+			Revenge = "Revenge", SunderArmor = "Sunder Armor", MockingBlow = "Mocking Blow", BerserkerRage = "Berserker Rage",
+			DefensiveStance = "Defensive Stance", BerserkerStance = "Berserker Stance", BattleStance = "Battle Stance",
+			ShieldBlock = "Shield Block", Recklessness = "Recklessness", Bloodrage = "Bloodrage", 
+			DemoralizingShout = "Demoralizing Shout", Disarm = "Disarm", PiercingHowl = "Piercing Howl", 
+			IntimidatingShout = "Intimidating Shout", ShieldWall = "Shield Wall", LastStand = "Last Stand", ShieldBash = "Shield Bash", HealingPot = "Healing Potion", 
+			ChallengingShout = "Challenging Shout", Taunt = "Taunt", MO = "mouseover", Stopcasting = "Stopcasting";
+			
+			const int BattleStanceID = 1;
+			const int DefensiveStanceID = 2;
+			// int Classic_PlayerShapeShiftForm;
+
+        
+        // Toggles
+        private const string ChargeToggle = "ChargeOff", RendToggle = "RendOff", HamstringToggle = "SlowOff", SaveRage = "Save", Interrupt = "Interrupt", TauntToggle = "Taunt", TankToggle = "Tank";
+		
+		public class Unit
+		{
+			public string Id { get; set; }
+
+			public bool TargetingPlayer
+			{
+				get { return API.PlayerIsUnitTarget(Id); }
+			}
+
+			public Unit(string id)
+			{
+				Id = id;
+			}
+		}
+
+        public override void Initialize()
+        {
+			CombatRoutine.isSOMRotation();
+            CombatRoutine.Name = "Classic Hardcore Warrior";
+            API.WriteLog("Hardcore Warrior");
+            CombatRoutine.isAutoBindReady = true;
+
+			// Macros
+            AddMacro(AutoAttack, "D1", "None", "None", @"/startattack");
+			AddMacro(Stopcasting, "D1", "None", "None", @"/stopcasting");
+			AddMacro(Taunt + MO, "D1", "None", "None", @"/cast [@mouseover] Taunt");
+			
+			AddSpell(HeroicStrike, 78); // Rank 1
+			AddSpell(Charge, 100); // Rank 1
+			AddSpell(Rend, 772); // Rank 1
+			AddSpell(BattleShout, 6673); // Rank 1
+			AddSpell(Hamstring, 1715); // Rank 1
+			AddSpell(ThunderClap, 6343); // Rank 1
+			AddSpell(MortalStrike, 12294); // Rank 1
+			AddSpell(Bloodthirst, 23881); // Rank 1
+			AddSpell(Execute, 5308); // Rank 1
+			AddSpell(Overpower, 7384); // Rank 1
+			AddSpell(Cleave, 845); // Rank 1
+			AddSpell(Slam, 1464); // Rank 1
+			AddSpell(Whirlwind, 1680); // Rank 1
+			AddSpell(Pummel, 6552); // Rank 1
+			AddSpell(ShieldSlam, 23922); // Rank 1
+			AddSpell(Revenge, 6572); // Rank 1
+			AddSpell(SunderArmor, 7386); // Rank 1
+			AddSpell(MockingBlow, 694); // Rank 1
+			AddSpell(BerserkerRage, 18499); // Rank 1
+			AddSpell(DefensiveStance, 71); // Only one rank
+			AddSpell(BerserkerStance, 2458); // Only one rank
+			AddSpell(BattleStance, 2457); // Only one rank
+			AddSpell(ShieldBlock, 2565); // Rank 1
+			AddSpell(Recklessness, 1719); // Only one rank
+			AddSpell(Bloodrage, 2687); // Only one rank
+			AddSpell(DemoralizingShout, 1160); // Rank 1
+			AddSpell(Disarm, 676); // Only one rank
+			AddSpell(PiercingHowl, 12323); // Only one rank
+			AddSpell(IntimidatingShout, 5246); // Only one rank
+			AddSpell(ShieldWall, 871); // Only one rank
+			AddSpell(LastStand, 12975); // Only one rank
+			AddSpell(ChallengingShout, 1161); // Only one rank
+			AddSpell(ShieldBash, 72); // Rank 1
+			AddSpell(Taunt, 355); // Rank 1
+
+			AddBuff(BattleShout, 6673); // Rank 1
+			AddBuff(BerserkerRage, 18499); // Rank 1
+			AddBuff(DefensiveStance, 71); // Only one rank
+			AddBuff(BerserkerStance, 2458); // Only one rank
+			AddBuff(ShieldBlock, 2565); // Only one rank
+			
+			AddDebuff(Rend, 772); // Rank 1
+			AddDebuff(Hamstring, 1715); // Rank 1
+			AddDebuff(ThunderClap, 6343); // Rank 1
+			AddDebuff(DemoralizingShout, 1160); // Rank 1
+			AddDebuff(SunderArmor, 7386); // Rank 1
+			
+			AddItem(HealingPot, 929);
+
+
+            AddToggles();
+        }
+
+       private void AddToggles()
+        {
+            string[] toggles = { ChargeToggle, RendToggle, HamstringToggle, SaveRage, Interrupt, TauntToggle, TankToggle };
+            foreach (string toggle in toggles)
+            {
+                AddToggle(toggle);
+            }
+        }
+
+        private bool ChargeZone => API.TargetRange >= 8 && API.TargetRange <= 25;
+
+public override void CombatPulse()
+        {
+			
+            if (!API.PlayerSpellonCursor)
+			
+            {
+				// DefensiveActions();
+				UtilityRotation();
+				TauntRotation();
+				DefensiveRotation();
+				AoeRotation(); 
+                DamageRotation();
+            }
+        }
+		
+// private void DefensiveActions() { if (API.PlayerItemCanUse(HealingPot) && API.PlayerItemRemainingCD(HealingPot) == 0 && API.PlayerHealthPercent < 25) { API.CastSpell(HealingPot); API.WriteLog("Used healing potion"); } }
+
+private void UtilityRotation()
+{
+    int rage = API.PlayerRage;
+
+    if (API.Classic_PlayerShapeShiftForm == DefensiveStanceID) {
+        if (API.CanCast(ShieldBash) && API.TargetCanInterrupted && API.ToggleIsEnabled(Interrupt) && rage >= 10) API.CastSpell(ShieldBash);
+    } else {
+        if (!API.PlayerHasBuff(BattleShout) && rage >= 10) API.CastSpell(BattleShout);
+        else if (!API.TargetHasDebuff(Hamstring) && !API.ToggleIsEnabled(HamstringToggle) && rage >= 10 && API.PlayerIsMoving && !API.ToggleIsEnabled(SaveRage)) API.CastSpell(Hamstring);
+    }
+}
+
+private void TauntRotation()
+{
+	Unit target = new Unit("target");
+	Unit mouseover = new Unit("mouseover");
+    if (!target.TargetingPlayer && API.TargetRange <= 5 && API.PlayerCanAttackTarget && API.ToggleIsEnabled(TauntToggle)) {
+        if (API.Classic_PlayerShapeShiftForm == DefensiveStanceID && API.CanCast(Taunt)) {
+            API.CastSpell(Taunt);
+        } else if (API.Classic_PlayerShapeShiftForm == BattleStanceID && API.CanCast(MockingBlow)) {
+            API.CastSpell(MockingBlow);
+        }
+    }
+
+    if (!mouseover.TargetingPlayer && API.MouseoverRange <= 5 && API.PlayerCanAttackMouseover && API.ToggleIsEnabled(TauntToggle) && API.Classic_PlayerShapeShiftForm == DefensiveStanceID && API.CanCast(Taunt)) {
+        API.CastSpell(Taunt + MO);
+    }
+}
+
+
+
+    
+
+
+
+private void AoeRotation() 
+{
+    if (API.PlayerUnitInMeleeRangeCount >= 2 && IsAOE && API.PlayerRage >= 20 && !API.ToggleIsEnabled(SaveRage)) {
+		if (!API.PlayerIsAutoAttack) API.CastSpell(AutoAttack);
+        if (API.CanCast(Overpower)) API.CastSpell(Overpower);
+        if (!API.TargetHasDebuff(DemoralizingShout)) API.CastSpell(DemoralizingShout);
+        if (API.PlayerUnitInMeleeRangeCount >= 2 && !API.TargetHasDebuff(ThunderClap)) API.CastSpell(ThunderClap);
+        if (API.CanCast(Cleave)) API.CastSpell(Cleave);
+    }
+}
+
+private void CooldownRotation()
+{
+    if (IsCooldowns && API.CanCast(Bloodrage) && API.PlayerHealthPercent > 55) API.CastSpell(Bloodrage);
+}
+
+// private void DefensiveRotation() 
+// {
+    // if (API.Classic_PlayerShapeShiftForm == DefensiveStanceID) {
+		// if (!API.PlayerIsAutoAttack) API.CastSpell(AutoAttack);
+		// else if (API.CanCast(DemoralizingShout) && API.PlayerUnitInMeleeRangeCount >= 2 && !API.TargetHasDebuff(DemoralizingShout) && API.PlayerRage >= 10) API.CastSpell(DemoralizingShout);
+        // else if (API.CanCast(Revenge) && API.PlayerRage >= 5) API.CastSpell(Revenge);
+		// else if (API.CanCast(ShieldBlock) && !API.PlayerHasBuff(ShieldBlock) && API.PlayerRage >= 10 && API.PlayerHealthPercent < 75 && API.TargetHasDebuff(DemoralizingShout)) API.CastSpell(ShieldBlock);
+		// else if (API.TargetDebuffStacks(SunderArmor) <= 5 && API.CanCast(SunderArmor) && API.PlayerRage >= 15 && API.TargetHealthPercent > 35) API.CastSpell(SunderArmor);
+        // else if (API.CanCast(HeroicStrike) && API.PlayerRage >= 15) API.CastSpell(HeroicStrike);
+    // }
+// }
+
+// Removed duplicated method DefensiveRotation()
+private void DefensiveRotation() 
+{
+    if (API.ToggleIsEnabled(TankToggle)) {
+        if (API.Classic_PlayerShapeShiftForm == BattleStanceID) {
+            if (!API.PlayerIsInCombat) {
+                if (API.CanCast(Charge) && ChargeZone && API.ToggleIsEnabled(ChargeToggle)) {
+                    API.CastSpell(Charge);
+                    return;
+                }
+            } else if (API.CanCast(ThunderClap) && API.PlayerUnitInMeleeRangeCount >= 2 && API.PlayerRage >= 20) {
+                API.CastSpell(ThunderClap);
+                API.CastSpell(DefensiveStance);
+                return;
+            }
+        }
+    }
+
+    if (API.Classic_PlayerShapeShiftForm == DefensiveStanceID) {
+        if (!API.PlayerIsAutoAttack) API.CastSpell(AutoAttack);
+        else if (API.CanCast(DemoralizingShout) && API.PlayerUnitInMeleeRangeCount >= 2 && !API.TargetHasDebuff(DemoralizingShout) && API.PlayerRage >= 10) API.CastSpell(DemoralizingShout);
+        else if (API.CanCast(Revenge) && API.PlayerRage >= 5) API.CastSpell(Revenge);
+        else if (API.CanCast(ShieldBlock) && !API.PlayerHasBuff(ShieldBlock) && API.PlayerRage >= 10 && API.PlayerHealthPercent < 75 && API.TargetHasDebuff(DemoralizingShout)) API.CastSpell(ShieldBlock);
+        else if (API.TargetDebuffStacks(SunderArmor) <= 5 && API.CanCast(SunderArmor) && API.PlayerRage >= 15 && API.TargetHealthPercent > 35) API.CastSpell(SunderArmor);
+        // else if (API.CanCast(HeroicStrike) && API.PlayerRage >= 15) API.CastSpell(HeroicStrike);
+    }
+}
+
+
+
+
+
+
+
+private void DamageRotation()
+{
+    int rage = API.PlayerRage;
+    if (API.Classic_PlayerShapeShiftForm == DefensiveStanceID) {
+        DefensiveRotation();
+		
+    } else if (!API.PlayerIsInCombat && API.CanCast(Charge) && !API.ToggleIsEnabled(ChargeToggle) && ChargeZone) {
+        API.CastSpell(Charge);
+    } else if (API.TargetRange <= 5) {
+        if (!API.PlayerIsAutoAttack) API.CastSpell(AutoAttack);
+		if (API.CanCast(Execute) && API.TargetHealthPercent <= 20 && rage >= 10) API.CastSpell(Execute);
+        else if (API.CanCast(Overpower) && (API.TargetDebuffStacks(SunderArmor) >= 1 || API.TargetHealthPercent <= 40 && !API.TargetHasDebuff(SunderArmor))) API.CastSpell(Overpower);
+        else if (!API.TargetHasDebuff(Rend) && API.TargetHealthPercent > 40 && !API.ToggleIsEnabled(RendToggle) && rage >= 10) API.CastSpell(Rend);
+		else if (IsAOE && API.CanCast(Cleave) && API.PlayerUnitInMeleeRangeCount >= 2) API.CastSpell(Cleave);
+		else if (API.TargetDebuffStacks(SunderArmor) < 6 && API.CanCast(SunderArmor) && rage >= 15 && API.PlayerUnitInMeleeRangeCount < 2 && API.TargetHealthPercent > 35) API.CastSpell(SunderArmor);
+		// else if (rage >= 15 && API.TargetDebuffStacks(SunderArmor) > 4 && API.TargetHealthPercent <= 25 && !API.ToggleIsEnabled(SaveRage)) API.CastSpell(HeroicStrike);
+		
+		// else if (rage >= 15 && (API.TargetDebuffStacks(SunderArmor) > 1 || API.TargetHealthPercent <= 40 && !API.TargetHasDebuff(SunderArmor)) && !API.ToggleIsEnabled(SaveRage)) API.CastSpell(HeroicStrike);
+		// else if (API.TargetDebuffStacks(SunderArmor) <= 3 && API.TargetHealthPercent >= 40 && API.CanCast(SunderArmor) && rage >= 15) API.CastSpell(SunderArmor);
+		// else if (API.TargetHealthPercent <= 35 && rage >= 15 && !API.ToggleIsEnabled(SaveRage) && API.TargetDebuffStacks(SunderArmor) >= && API.PlayerUnitInMeleeRangeCount < 2) API.CastSpell(HeroicStrike);
+        // else if (API.TargetDebuffStacks(SunderArmor) <= 2 && API.PlayerUnitInMeleeRangeCount < 2 && API.CanCast(SunderArmor) && rage >= 15) API.CastSpell(SunderArmor);
+        
+        
+        else {
+            
+            CooldownRotation(); 
+            
+        }
+    }
+}
+
+
+
+public override void OutOfCombatPulse() { }
+public override void Pulse() { }
+    }
+}
